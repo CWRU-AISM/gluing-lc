@@ -1,0 +1,20 @@
+name: sheaf_final
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - torch>=2.0
+      - numpy>=1.23
+      - scipy>=1.10
+      - scikit-learn>=1.2
+      - matplotlib>=3.6
+      - tqdm>=4.65
+      - transformers>=4.30
+      - datasets>=2.10
+      - bitsandbytes>=0.41
+      - accelerate>=0.20
+      - pytest>=7.0
