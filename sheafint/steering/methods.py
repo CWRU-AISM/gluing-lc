@@ -1,4 +1,10 @@
-# Build steering vectors from a sheaf decomposition and a target style direction.
+"""
+Build steering vectors from a sheaf decomposition.
+
+Takes a target style direction (e.g. casual minus formal) plus a sheaf
+or Fisher decomposition and produces the variance-matched, H^1-only,
+H^0-removed, and full-style steering vectors compared in Table 4.
+"""
 
 from typing import Dict
 import numpy as np

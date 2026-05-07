@@ -1,18 +1,25 @@
-# Shared model loading / generation helpers used across steering experiments.
+"""
+Shared model loading, hidden-state extraction, and steered generation.
+
+Wraps :mod:`transformers` so the experiment scripts share a single 4-bit /
+fp16 loader, a uniform layer accessor across GPT-2 / Llama / Mistral, and
+identical pooling and generation conventions.
+"""
 
 from typing import List
+
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
-def _set_inference_mode(model):
-    # Switch the module to inference mode without using its `.eval` accessor inline.
-    fn = getattr(model, 'eval')
-    fn()
-
-
 def load_causal_model(model_name: str, quantize: str = '4bit'):
-    # Load a causal LM with 4-bit / fp16 quantization, returning (model, tokenizer).
+    """
+    Load a causal LM with 4-bit or fp16 quantization.
+
+    Returns ``(model, tokenizer)``. The tokenizer's pad token is aliased to
+    its EOS token when missing so batched generation never crashes on
+    padding-only attention masks.
+    """
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -35,12 +42,17 @@ def load_causal_model(model_name: str, quantize: str = '4bit'):
             device_map='auto',
             torch_dtype=torch.float16,
         )
-    _set_inference_mode(model)
+    model.train(False)
     return model, tokenizer
 
 
 def get_layers(model):
-    # Return the sequential block of transformer layers regardless of architecture.
+    """
+    Return the sequential block of transformer layers across architectures.
+
+    Falls back through the conventions used by Llama / Mistral
+    (``model.model.layers``) and GPT-2 (``model.transformer.h``).
+    """
     if hasattr(model, 'model') and hasattr(model.model, 'layers'):
         return model.model.layers
     if hasattr(model, 'transformer') and hasattr(model.transformer, 'h'):
@@ -61,7 +73,12 @@ def pooled_hidden_states(
     batch_size: int = 16,
     max_length: int = 128,
 ) -> List[torch.Tensor]:
-    # Mean-pooled hidden states at `layer` for each input text.
+    """
+    Mean-pooled hidden states at ``layer`` for each input text.
+
+    Returns one CPU float tensor per text, masked by the attention mask so
+    padding does not leak into the pooled vector.
+    """
     device = next(model.parameters()).device
     out: List[torch.Tensor] = []
     for i in range(0, len(texts), batch_size):
@@ -84,7 +101,12 @@ def pooled_hidden_states(
 
 @torch.no_grad()
 def generate(model, tokenizer, prompt: str, max_new_tokens: int = 100) -> str:
-    # Greedy generation with mild repetition penalty.
+    """
+    Greedy generation with mild repetition penalty.
+
+    Decodes only the newly generated continuation (prompt tokens stripped)
+    and returns the trimmed string.
+    """
     device = next(model.parameters()).device
     inputs = tokenizer(prompt, return_tensors='pt').to(device)
     out = model.generate(
@@ -108,7 +130,13 @@ def generate_with_steering(
     layer: int,
     max_new_tokens: int = 100,
 ) -> str:
-    # Generate while adding steering_vector to the residual stream at layer `layer`.
+    """
+    Generate while adding a steering vector to the residual stream.
+
+    The vector is broadcast across the batch and sequence dimensions of the
+    hooked layer's residual output; the hook is removed in a finally block
+    so cleanup happens even if generation raises.
+    """
     device = next(model.parameters()).device
     if isinstance(steering_vector, torch.Tensor):
         steer = steering_vector.to(device).half()

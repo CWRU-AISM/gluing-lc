@@ -1,4 +1,10 @@
-# Restriction-map estimators used by steering experiments (PCA and Fisher / contrastive).
+"""
+Restriction-map estimators for steering experiments.
+
+Provides joint-PCA and contrastive Fisher fitters; the resulting maps
+are used to project residuals before fitting the sheaf or Fisher
+decomposition.
+"""
 
 from typing import Tuple
 import numpy as np

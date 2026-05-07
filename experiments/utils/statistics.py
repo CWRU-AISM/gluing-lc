@@ -1,6 +1,12 @@
-# Statistical helpers (bootstrap CIs, McNemar's test).
+"""
+Statistical helpers shared across experiments.
+
+Provides a bootstrap mean confidence interval and McNemar's test for paired
+binary outcomes (used to compare steering accuracies).
+"""
 
 from typing import Iterable, Tuple
+
 import numpy as np
 from scipy.stats import binomtest, chi2 as _chi2_dist
 
@@ -11,7 +17,13 @@ def bootstrap_ci(
     ci: float = 0.95,
     seed: int = 42,
 ) -> Tuple[float, float, float]:
-    # Bootstrap (mean, lo, hi) for a 1-D array of samples.
+    """
+    Bootstrap mean and percentile CI for a 1-D array of samples.
+
+    Returns ``(mean, lo, hi)`` for the requested confidence level. An empty
+    input collapses to ``(0, 0, 0)`` so callers do not need to guard against
+    silent NaN propagation.
+    """
     rng = np.random.default_rng(seed)
     arr = np.asarray(list(values), dtype=float)
     n = len(arr)
@@ -28,7 +40,13 @@ def bootstrap_ci(
 
 
 def mcnemar_test(s1: Iterable[int], s2: Iterable[int]) -> float:
-    # McNemar's test for paired binary outcomes; uses exact binomial when n_disc < 25.
+    """
+    McNemar's test for paired binary outcomes.
+
+    Falls back to the exact binomial distribution when fewer than 25
+    discordant pairs are observed; otherwise uses the continuity-corrected
+    chi-square approximation.
+    """
     a = np.asarray(list(s1))
     b = np.asarray(list(s2))
     only_a = int(((a == 1) & (b == 0)).sum())

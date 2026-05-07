@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-# Comprehensive steering evaluation with perplexity, similarity, and sentiment metrics.
+"""
+Comprehensive steering metrics (Table 3).
+
+Reports perplexity ratios, mean-pooled cosine similarity, sentiment
+shift, and text-change rates for H^0 / H^1 / PCA-projected steering
+directions on a casual-vs-formal style axis.
+"""
 
 import argparse
 import json

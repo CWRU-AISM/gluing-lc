@@ -1,4 +1,9 @@
-# Translation contexts for cross-lingual sheaf consistency.
+"""
+Translation contexts for cross-lingual sheaf consistency.
+
+Pairs of parallel translations across a configurable language set; used
+to test whether the H^0 subspace is preserved under language change.
+"""
 
 from typing import List
 from .base import BaseContext

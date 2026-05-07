@@ -1,4 +1,9 @@
-# Build a sheaf cover from one or more BaseContext sources.
+"""
+Sheaf cover construction.
+
+Combines one or more :class:`BaseContext` sources into a single cover
+suitable for fitting :class:`sheafint.core.sheaf.ScalableSheaf`.
+"""
 
 from typing import Dict, List, Tuple
 import torch

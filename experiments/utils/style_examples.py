@@ -1,4 +1,10 @@
-# Style exemplar pools used to compute the casual <-> formal direction.
+"""
+Style exemplar pools used to fit the casual / formal steering direction.
+
+Each pool feeds :func:`utils.perplexity.concept_steering_vector`; the
+mean-of-differences between FORMAL and CASUAL pools gives the direction
+added to the residual stream during steered generation.
+"""
 
 FORMAL_EXAMPLES = [
     "I believe this proposal merits careful consideration.",

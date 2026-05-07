@@ -1,4 +1,9 @@
-# Randomized SVD utilities used throughout the sheaf pipeline.
+"""
+Randomized SVD utilities used throughout the sheaf pipeline.
+
+Provides truncated SVD with oversampling and a rank-finder used to compute
+``dim ker`` for the coboundary operators.
+"""
 
 from typing import Tuple
 import warnings

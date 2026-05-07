@@ -1,10 +1,21 @@
-# Lightweight text quality metrics for generation evaluation.
+"""
+Lightweight text-quality metrics for generation evaluation.
+
+Used by the steering experiments to detect repetitive degeneration, check
+whether the original entity / subject survives steering, and judge whether
+a generation has changed meaningfully relative to the baseline.
+"""
 
 from collections import Counter
 
 
 def first_sentence(text: str) -> str:
-    # Trim to the first sentence using simple punctuation cues.
+    """
+    Trim ``text`` to its first sentence using simple punctuation cues.
+
+    Falls back to the first 200 characters when no terminator is found so
+    extremely long single-sentence outputs do not propagate downstream.
+    """
     text = text.strip()
     if not text:
         return ''
@@ -15,7 +26,13 @@ def first_sentence(text: str) -> str:
 
 
 def is_degenerate(text: str, max_ngram: int = 4) -> bool:
-    # Detect repetitive n-gram loops within the first sentence.
+    """
+    Detect repetitive n-gram loops within the first sentence.
+
+    An output is flagged as degenerate when any n-gram of length 2..N
+    occurs at least three times and accounts for more than 30% of the
+    n-grams in the first sentence.
+    """
     words = text.lower().split()
     if len(words) < 10:
         return False
@@ -46,7 +63,13 @@ def subject_in_text(text: str, subject: str) -> bool:
 
 
 def text_meaningfully_changed(baseline: str, steered: str, jaccard_threshold: float = 0.8) -> bool:
-    # Treat outputs as "changed" when their Jaccard word overlap is below threshold.
+    """
+    Whether ``steered`` has departed from ``baseline``.
+
+    Treats the outputs as different when their Jaccard word overlap drops
+    below ``jaccard_threshold``; identical-after-stripping outputs are
+    rejected up front.
+    """
     if baseline.strip() == steered.strip():
         return False
     a = set(baseline.lower().split())
@@ -58,7 +81,13 @@ def text_meaningfully_changed(baseline: str, steered: str, jaccard_threshold: fl
 
 
 def evaluate_generation(baseline: str, steered: str, entity: str, subject: str) -> dict:
-    # Combine fact / subject / style / coherence checks into a single result dict.
+    """
+    Combine fact / subject / style / coherence checks into a single dict.
+
+    The ``joint`` field requires both the entity to survive and the style
+    to change; ``coherent_joint`` additionally requires the steered output
+    not to be degenerate.
+    """
     fact_preserved = entity_in_text(steered, entity)
     subject_preserved = subject_in_text(steered, subject)
     style_changed = text_meaningfully_changed(baseline, steered)

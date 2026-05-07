@@ -1,4 +1,9 @@
-# Prompt-variant contexts: same task, different phrasing.
+"""
+Prompt-variant contexts.
+
+Same task, different phrasings. Used to test whether instruction-style
+rewordings of the same query map to a consistent H^0 subspace.
+"""
 
 from .base import BaseContext
 

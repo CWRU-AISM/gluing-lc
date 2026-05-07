@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-# Causal validation of H0 / H1 dimensions via variance-matched ablation controls.
+"""
+Causal validation of H^0 / H^1 dimensions (Table 1).
+
+Compares H^1 ablations to variance-matched dimension controls and reports
+bootstrap CIs on the resulting effect ratios. The variance match is
+critical because raw effect sizes scale with the total variance ablated.
+"""
 
 import argparse
 import json

@@ -1,4 +1,9 @@
-# Base context types for sheaf interpretability.
+"""
+Base context types for sheaf interpretability.
+
+Defines :class:`BaseContext` and :class:`ContextPair` as the lightweight
+data classes the rest of :mod:`sheafint.data` builds on.
+"""
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple

@@ -1,4 +1,9 @@
-# Learn node projections and edge transport maps for sheaf construction.
+"""
+Node projections and edge transport maps for sheaf construction.
+
+Provides joint-PCA and per-node PCA projections plus orthogonal Procrustes
+transports between projected node features.
+"""
 
 from typing import Dict, Tuple
 import torch

@@ -1,4 +1,10 @@
-# Top-level ScalableSheaf class wiring together projections, coboundaries, and cohomology.
+"""
+Top-level :class:`ScalableSheaf` class.
+
+Wires together projections, coboundaries, and cohomology so user code can
+go from raw activations to (H^0, H^1) dimensions and Hodge mass with a
+single ``fit``/``evaluate`` pair.
+"""
 
 from typing import Dict, List, Optional, Tuple
 import warnings

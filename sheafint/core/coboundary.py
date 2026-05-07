@@ -1,4 +1,9 @@
-# Coboundary operator construction (delta0 and delta1) with chain-complex exactness.
+"""
+Coboundary operators ``delta_0`` and ``delta_1``.
+
+Builds the matrices on a sheaf cover so that ``delta_1 . delta_0 = 0``
+holds exactly, which is what makes the cohomology dimensions well-defined.
+"""
 
 from typing import Dict, List, Tuple
 import torch

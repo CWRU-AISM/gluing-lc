@@ -1,4 +1,10 @@
-# High-level helpers for batched activation extraction.
+"""
+High-level helpers for batched activation extraction.
+
+Wraps :class:`HookManager` so callers can register layer hooks, run a
+batch of contexts through the model, and recover per-context, per-layer
+activations without manually wiring forward passes.
+"""
 
 from typing import Dict, List, Union
 import torch

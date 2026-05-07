@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-# Cross-check the variance heuristic against actual sheaf cohomology and Laplacian spectrum.
+"""
+Cohomology vs. variance-heuristic cross-check.
+
+Fits a :class:`ScalableSheaf` on MRPC paraphrase activations, runs the
+Laplacian spectrum, and correlates the H^0 / H^1 dimension counts with
+the per-dim absolute-difference variance heuristic that earlier work used
+as a proxy.
+"""
 
 import argparse
 import json

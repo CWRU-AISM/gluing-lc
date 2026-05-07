@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-# Sheaf cohomology steering evaluation on the CounterFact dataset.
+"""
+Sheaf cohomology steering evaluation on CounterFact.
+
+Builds joint-PCA restriction maps, sheaf-Laplacian and Fisher
+decompositions, and evaluates random / full-style / variance-matched /
+H1-dim / H0-removed steering with the McNemar paired test (Table 4).
+"""
 
 import argparse
 import gc

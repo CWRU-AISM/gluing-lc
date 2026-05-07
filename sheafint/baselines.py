@@ -1,4 +1,9 @@
-# Baseline similarity / consistency methods for comparison with sheaf metrics.
+"""
+Baseline similarity / consistency methods.
+
+Cosine, CKA, and MSE baselines used to anchor :class:`SheafMetrics`
+against the simpler comparisons reported in earlier interpretability work.
+"""
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple

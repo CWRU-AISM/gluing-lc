@@ -21,17 +21,25 @@ The package ships a scalable sheaf implementation, restriction-map learners (joi
 ```
 sheaf_final/
   sheafint/
-    core/        ScalableSheaf, projections, coboundaries, cohomology, spectrum
-    data/        Paraphrase, translation, prompt-variant contexts and covers
+    core/        ScalableSheaf, H^0 fitters, edge constructors, holonomy
+    data/        Paraphrase / translation / prompt-variant contexts, relation templates
     models/      HookManager, batched activation extraction, layer-name tables
     steering/    Restriction maps, sheaf/Fisher decompositions, steering vectors
     baselines.py Cosine, CKA, MSE consistency baselines
   experiments/
-    run_causal_validation.py
-    run_cohomology_validation.py
-    run_counterfact_steering.py
-    run_comprehensive_steering.py
-    utils/       Shared dataset, model, statistics, and metric helpers
+    run_causal_validation.py        Causal validation (Table 1)
+    run_cohomology_validation.py    Cohomology vs. variance heuristic
+    run_counterfact_steering.py     CounterFact steering (Table 4)
+    run_comprehensive_steering.py   Steering metrics (Table 3)
+    run_leace_counterfact.py        LEACE vs sheaf H^0 retrieval, held-out CounterFact
+    run_leace_dim_controlled.py     Same as above plus the dim-controlled LEACE-20D baseline
+    run_restriction_ablation.py     PCA / random / identity restriction maps
+    run_cycle_h0.py                 Pair / ring / clique constructions for cycle-aware H^0
+    run_crossdataset_p.py           Train P on PAWS/QQP/MRPC, evaluate on CounterFact
+    run_m_sensitivity.py            Sweep edge dimension m
+    run_pooling_sensitivity.py      Mean / last / first-token pooling
+    run_holonomy_null.py            Shuffled-paraphrase null calibration for cycle holonomy
+    utils/       Shared dataset, model I/O, retrieval, statistics, and metric helpers
   figures/       Shared figure style for camera-ready plots
   tests/         Pytest smoke tests
 ```
@@ -130,6 +138,51 @@ python experiments/run_comprehensive_steering.py --model gpt2 --n_samples 500
 ```
 
 Reports perplexity ratios, semantic similarity, and text-change rates for H0 vs. H1 vs. PCA-projected steering directions.
+
+### Held-out retrieval and reviewer experiments
+
+Held-out CounterFact retrieval lets us check that sheaf H^0 outperforms LEACE concept erasure and dim-controlled LEACE-20D on a clean train/test split:
+
+```bash
+python experiments/run_leace_counterfact.py \
+    --model mistralai/Mistral-7B-v0.1 --quantize 4bit --n_facts 500
+python experiments/run_leace_dim_controlled.py \
+    --model mistralai/Mistral-7B-v0.1 --quantize 4bit --n_facts 500
+```
+
+Restriction-map ablation (joint PCA vs. random orthonormal vs. identity):
+
+```bash
+python experiments/run_restriction_ablation.py --model gpt2 --n_facts 200
+```
+
+Cycle-aware H^0 (pair-only forest vs. multi-paraphrase rings vs. cliques):
+
+```bash
+python experiments/run_cycle_h0.py --model gpt2 --n_facts 300
+```
+
+Cross-dataset transfer (fit P on PAWS/QQP/MRPC, evaluate on CounterFact):
+
+```bash
+python experiments/run_crossdataset_p.py --model gpt2 --n_facts 300
+```
+
+Edge-dimension and pooling sensitivities:
+
+```bash
+python experiments/run_m_sensitivity.py --model gpt2 --n_facts 300
+python experiments/run_pooling_sensitivity.py --model gpt2 --n_facts 300
+```
+
+Holonomy null calibration on the relation hypergraph:
+
+```bash
+python experiments/run_holonomy_null.py --model gpt2 --n_per_fact 5 \
+    --n_shuffle_seeds 20
+```
+
+The script refits per-node PCA and per-edge Procrustes transports under shuffled paraphrase assignments, bootstraps over the number of overlap tokens, and writes the observed Frobenius distances along with the shuffled null distribution.
 
 ## Library quick start
 

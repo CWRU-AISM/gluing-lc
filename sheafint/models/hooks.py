@@ -1,4 +1,10 @@
-# Forward / backward hook utilities for transformer activation extraction.
+"""
+Forward and backward hook utilities for transformer activation extraction.
+
+Provides :class:`HookManager` (lifecycle / cleanup) and
+:class:`ActivationCache` (layer-keyed storage) used by the higher-level
+``extract_features`` helpers.
+"""
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field

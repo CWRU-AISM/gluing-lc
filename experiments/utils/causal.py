@@ -1,14 +1,28 @@
-# Helpers for ablation-based causal validation of H0 / H1 dimensions.
+"""
+Helpers for ablation-based causal validation of H0 / H1 dimensions.
+
+Provides a hook factory that zeros chosen residual-stream dimensions, an
+end-to-end effect estimator that compares baseline and ablated final-layer
+states, the variance-proxy H0/H1 dim identifier, the variance-matched
+control-dim selector, and the bootstrap CI used in Table 1.
+"""
 
 from typing import Dict, List, Tuple
+
 import numpy as np
 import torch
 import torch.nn.functional as F
+
 from .model_io import get_layers
 
 
 def device_for_inputs(model) -> str:
-    # Pick a sensible device for inputs even when the model is sharded.
+    """
+    Pick a sensible device for inputs even when the model is sharded.
+
+    Prefers the first CUDA shard recorded in ``hf_device_map`` and falls
+    back to the device of the first parameter tensor.
+    """
     if hasattr(model, 'hf_device_map'):
         for dev in model.hf_device_map.values():
             if 'cuda' in str(dev):
@@ -18,7 +32,12 @@ def device_for_inputs(model) -> str:
 
 @torch.no_grad()
 def hidden_states_at(model, tokenizer, text: str, layer_idx: int) -> torch.Tensor:
-    # Return hidden states at the given layer (post-block) for a single text.
+    """
+    Hidden states at the post-block of layer ``layer_idx`` for one input.
+
+    Uses ``layer_idx + 1`` against ``output_hidden_states`` because index 0
+    is the embedding layer.
+    """
     inputs = tokenizer(text, return_tensors='pt', truncation=True, max_length=128)
     inputs = inputs.to(device_for_inputs(model))
     outputs = model(inputs['input_ids'], output_hidden_states=True, return_dict=True)
@@ -26,7 +45,12 @@ def hidden_states_at(model, tokenizer, text: str, layer_idx: int) -> torch.Tenso
 
 
 def make_ablation_hook(intervention_dims: List[int]):
-    # Forward hook that zeros out the requested dimensions.
+    """
+    Build a forward hook that zeros the requested residual-stream dims.
+
+    Out-of-range dims are silently dropped so callers can pass dim lists
+    that exceed the model's hidden size without manual filtering.
+    """
     def hook(_module, _inputs, output):
         if not intervention_dims:
             return output
@@ -52,7 +76,12 @@ def ablation_effect(
     n_layers_total: int,
     dims: List[int],
 ) -> Dict[str, float]:
-    # L2 + cosine distance between final-layer states with and without ablation.
+    """
+    L2 and cosine distance between baseline and ablated final-layer states.
+
+    Substitutes the baseline state in place of any NaN/Inf values from the
+    ablated forward pass so a single bad batch cannot crash the aggregator.
+    """
     baseline = hidden_states_at(model, tokenizer, text, n_layers_total - 1).mean(dim=0)
     handle = get_layers(model)[layer_idx].register_forward_hook(make_ablation_hook(dims))
     try:
@@ -82,7 +111,13 @@ def identify_h0_h1_dims(
     layer_idx: int,
     n_dims: int,
 ) -> Tuple[List[int], List[int], np.ndarray]:
-    # Variance proxy: H0 = lowest-difference dims, H1 = highest-difference dims.
+    """
+    Variance-proxy H0 / H1 dimension picker.
+
+    Computes the mean per-dim absolute difference across paraphrase pairs;
+    H0 dims are the lowest-difference (most invariant) and H1 dims are the
+    highest-difference (most variable).
+    """
     diffs = []
     for s1, s2 in paraphrase_pairs:
         try:
@@ -108,7 +143,13 @@ def variance_matched_dims(
     n_dims: int,
     exclude_dims: List[int],
 ) -> List[int]:
-    # Pick dims whose total variance roughly matches `target_variance`.
+    """
+    Pick dims whose total variance roughly matches ``target_variance``.
+
+    Sorted by per-dim distance to the equal-share target so the chosen
+    subset is variance-matched without overlapping the H0 / H1 sets passed
+    in via ``exclude_dims``.
+    """
     available = [i for i in range(len(variance_per_dim)) if i not in exclude_dims]
     target_each = target_variance / n_dims
     available.sort(key=lambda d: abs(variance_per_dim[d] - target_each))
@@ -121,7 +162,12 @@ def bootstrap_effect_ratio(
     n_bootstrap: int = 1000,
     seed: int = 42,
 ) -> Dict:
-    # Bootstrap CI for the (mean_a / mean_b) ratio.
+    """
+    Bootstrap CI for the ``mean(a) / mean(b)`` ratio.
+
+    Returns the point ratio, 2.5 / 97.5 percentile bounds, and a
+    significance flag set when the 95% CI excludes 1.
+    """
     rng = np.random.default_rng(seed)
     a = np.asarray(condition_a)
     b = np.asarray(condition_b)

@@ -1,4 +1,10 @@
-# Steering helpers built on top of sheaf decompositions.
+"""
+Steering helpers built on top of sheaf decompositions.
+
+Re-exports the joint-PCA and contrastive-Fisher restriction-map fitters,
+the sheaf-Laplacian and Fisher decompositions of the projected residuals,
+and the steering-vector builders used by the CounterFact experiments.
+"""
 
 from .decomposition import fisher_decomposition, sheaf_laplacian_decomposition
 from .methods import build_steering_vectors, scale_to_norm

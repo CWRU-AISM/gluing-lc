@@ -1,4 +1,9 @@
-# Layer name lookup tables for common transformer architectures.
+"""
+Layer-name lookup tables for common transformer architectures.
+
+Maps friendly names ("transformer block 5") to the canonical
+``transformer.h.5`` / ``model.layers.5`` paths used to register hooks.
+"""
 
 from typing import Dict, List
 

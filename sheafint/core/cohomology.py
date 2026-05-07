@@ -1,4 +1,10 @@
-# Cohomology dimension computation and Hodge decomposition.
+"""
+Cohomology dimension computation and Hodge decomposition.
+
+Returns ``dim H^0 = dim ker delta_0`` and ``dim H^1 = dim ker delta_1
+- dim im delta_0`` along with the exact / harmonic / coexact split of a
+1-cochain.
+"""
 
 from typing import Dict, Optional
 import torch

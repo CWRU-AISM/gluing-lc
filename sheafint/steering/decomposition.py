@@ -1,4 +1,10 @@
-# Sheaf-Laplacian and Fisher decompositions of paraphrase activation differences.
+"""
+Sheaf-Laplacian and Fisher decompositions.
+
+Operates on paraphrase activation differences in the projected edge
+space, returning the H^0 / H^1 eigenbases consumed by the steering
+methods in :mod:`sheafint.steering.methods`.
+"""
 
 from typing import Dict
 import numpy as np

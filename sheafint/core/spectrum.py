@@ -1,4 +1,9 @@
-# Sheaf Laplacian spectrum and H0 projection diagnostics.
+"""
+Sheaf Laplacian spectrum and H^0 projection diagnostics.
+
+Computes the eigendecomposition of ``L = delta_0^T delta_0`` and projects
+0-cochains onto ``ker delta_0`` (the H^0 subspace).
+"""
 
 from typing import Dict, Optional
 import warnings

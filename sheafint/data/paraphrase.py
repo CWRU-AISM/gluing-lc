@@ -1,4 +1,9 @@
-# Paraphrase-style context sources (hand-crafted plus GLUE/PAWS loaders).
+"""
+Paraphrase context sources.
+
+Bundles a hand-crafted :class:`ParaphraseContext` plus loaders for the
+GLUE MRPC / QQP / STS-B and PAWS datasets behind a uniform interface.
+"""
 
 from .base import BaseContext
 try:
