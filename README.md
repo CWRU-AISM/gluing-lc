@@ -1,7 +1,7 @@
 # NeurIPS 2026: Gluing Local Contexts into Global Meaning: A Sheaf-Theoretic Decomposition of Transformer Representations
 
 <p align="center">
-  <a href="https://bryceag11.github.io"><b>Bryce Grant</b></a> · <a href="https://scholar.google.com/citations?user=4CbVWDcAAAAJ&hl=en"><b>Peng Wang</b></a><br>
+  <a href="https://bryceag11.github.io"><b>Bryce Grant</b></a>, <a href="https://scholar.google.com/citations?user=4CbVWDcAAAAJ&hl=en"><b>Peng Wang</b></a><br>
   Case Western Reserve University
 </p>
 
