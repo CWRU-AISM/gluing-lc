@@ -1,8 +1,8 @@
 """
 Hyperedge sheaves for transformer interpretability with genuine cellular cohomology.
 
-The matching-graph construction in scalable_sheaf reduces algebraically to H^1 = 0
-(Remark 1 in the paper) because the graph contains no cycles. To obtain genuine
+The paraphrase matching graph used by ScalableSheaf has H^1 = 0 because it
+contains no cycles. To obtain genuine
 sheaf cohomology with H^1 != 0, we need a richer cellular structure: cycles
 without filling, or non-trivial monodromy on filled cycles.
 
@@ -25,19 +25,14 @@ References:
 from __future__ import annotations
 
 from itertools import combinations
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 import torch
 
 
-SimplexId = Tuple[str, ...]
 PairKey = Tuple[str, str]
 TripleKey = Tuple[str, str, str]
-
-
-def _sorted(simplex: Iterable[str]) -> SimplexId:
-    return tuple(sorted(set(simplex)))
 
 
 class HyperedgeComplex:
@@ -52,11 +47,11 @@ class HyperedgeComplex:
       mode='matching' : each cluster contributes a perfect matching only (one
                         edge per consecutive pair). Reproduces the paper's
                         matching graph.
-      mode='vr'       : Vietoris-Rips on a precomputed distance matrix; edges
-                        included by threshold, triangles only where all three
-                        edges exist.
       mode='ring'     : each cluster of size k contributes a cycle (k edges, no
                         triangles). H^1 dim = number of independent cycles.
+      mode='triangulated' : same simplices as 'clique' (every within-cluster
+                        triangle filled); cross-cluster edges added with
+                        :meth:`add_edge` stay unfilled.
 
     Cross-cluster connections are added when the same node appears in multiple
     clusters; this is how relation hypergraphs (multiple facts sharing an
@@ -64,7 +59,7 @@ class HyperedgeComplex:
     """
 
     def __init__(self, mode: str = 'clique'):
-        if mode not in {'clique', 'matching', 'vr', 'ring', 'triangulated'}:
+        if mode not in {'clique', 'matching', 'ring', 'triangulated'}:
             raise ValueError(f"unknown mode: {mode}")
         self.mode = mode
         self.nodes: List[str] = []
@@ -79,7 +74,8 @@ class HyperedgeComplex:
             self._node_set.add(n)
             self.nodes.append(n)
 
-    def _add_edge(self, a: str, b: str) -> None:
+    def add_edge(self, a: str, b: str) -> None:
+        """Add an (unfilled) edge, e.g. a cross-cluster link between facts."""
         if a == b:
             return
         e = (min(a, b), max(a, b))
@@ -105,50 +101,15 @@ class HyperedgeComplex:
             return
         if self.mode == 'matching':
             for a, b in zip(members[::2], members[1::2]):
-                self._add_edge(a, b)
+                self.add_edge(a, b)
         elif self.mode == 'ring':
             for a, b in zip(members, members[1:] + members[:1]):
-                self._add_edge(a, b)
-        elif self.mode == 'clique':
+                self.add_edge(a, b)
+        else:
             for a, b in combinations(members, 2):
-                self._add_edge(a, b)
+                self.add_edge(a, b)
             for a, b, c in combinations(members, 3):
                 self._add_face(a, b, c)
-        elif self.mode == 'triangulated':
-            # Paraphrases within a cluster form a ring; their pairwise edges and
-            # all 3-paraphrase triangles are filled, killing the within-cluster
-            # 1-cycle. Cross-cluster edges (added separately) stay unfilled.
-            for a, b in combinations(members, 2):
-                self._add_edge(a, b)
-            for a, b, c in combinations(members, 3):
-                self._add_face(a, b, c)
-        # 'vr' is added externally via add_vr_edges
-
-    def add_vr_edges(
-        self,
-        names: Sequence[str],
-        distances: np.ndarray,
-        edge_quantile: float = 0.2,
-        face_threshold: Optional[float] = None,
-    ) -> None:
-        """Add Vietoris-Rips edges at the given distance quantile, faces only
-        when all three edges exist."""
-        if distances.shape != (len(names), len(names)):
-            raise ValueError("distances must be square and match names length")
-        for n in names:
-            self._add_node(n)
-        flat = distances[np.triu_indices_from(distances, k=1)]
-        thresh = float(np.quantile(flat, edge_quantile))
-        for i, j in zip(*np.triu_indices_from(distances, k=1)):
-            if distances[i, j] <= thresh:
-                self._add_edge(names[int(i)], names[int(j)])
-        if face_threshold is None:
-            face_threshold = thresh
-        for a, b, c in combinations(range(len(names)), 3):
-            if (distances[a, b] <= face_threshold
-                    and distances[b, c] <= face_threshold
-                    and distances[a, c] <= face_threshold):
-                self._add_face(names[a], names[b], names[c])
 
     def to_overlaps(
         self,
@@ -182,6 +143,31 @@ class HyperedgeComplex:
         }
 
 
+def simplicial_coboundaries(
+    node_index: Dict[str, int],
+    edges: Sequence[PairKey],
+    faces: Sequence[TripleKey],
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Signed coboundaries of a 2-complex with trivial R coefficients.
+
+    ``d0`` is (E x V) with -1 / +1 at the endpoints of each edge (u, v);
+    ``d1`` is (F x E) with boundary([a,b,c]) = [b,c] - [a,c] + [a,b], edges
+    matched up to orientation.
+    """
+    d0 = np.zeros((len(edges), len(node_index)), dtype=np.float64)
+    for e_idx, (u, v) in enumerate(edges):
+        d0[e_idx, node_index[u]] = -1.0
+        d0[e_idx, node_index[v]] = 1.0
+    edge_idx = {e: i for i, e in enumerate(edges)}
+    d1 = np.zeros((len(faces), len(edges)), dtype=np.float64)
+    for f_idx, (a, b, c) in enumerate(faces):
+        for (x, y), sign in [((b, c), 1.0), ((a, c), -1.0), ((a, b), 1.0)]:
+            e = (min(x, y), max(x, y))
+            if e in edge_idx:
+                d1[f_idx, edge_idx[e]] = sign
+    return d0, d1
+
+
 def algebraic_cohomology(
     n_nodes: int,
     edges: List[PairKey],
@@ -197,24 +183,10 @@ def algebraic_cohomology(
     """
     n_e = len(edges)
     n_f = len(faces)
-    # delta0: edges x nodes
-    d0 = np.zeros((n_e, n_nodes), dtype=np.float64)
-    for e_idx, (u, v) in enumerate(edges):
-        d0[e_idx, node_index[u]] = -1.0
-        d0[e_idx, node_index[v]] = 1.0
-    # delta1: faces x edges with alternating signs (signed boundary of triangle)
-    edge_idx = {e: i for i, e in enumerate(edges)}
-    d1 = np.zeros((n_f, n_e), dtype=np.float64)
-    for f_idx, (a, b, c) in enumerate(faces):
-        # boundary of [a,b,c] = [b,c] - [a,c] + [a,b]
-        for edge, sign in [((b, c), 1), ((a, c), -1), ((a, b), 1)]:
-            e = (min(*edge), max(*edge))
-            if e in edge_idx:
-                d1[f_idx, edge_idx[e]] = sign
+    d0, d1 = simplicial_coboundaries(node_index, edges, faces)
     rank_d0 = int(np.linalg.matrix_rank(d0)) if d0.size else 0
     rank_d1 = int(np.linalg.matrix_rank(d1)) if d1.size else 0
     H0 = n_nodes - rank_d0
-    # H1 = ker(d1) - im(d0); ker(d1) = n_e - rank(d1); im(d0) = rank(d0)
     H1 = max(0, (n_e - rank_d1) - rank_d0)
     H2 = max(0, n_f - rank_d1)
     return {
@@ -229,46 +201,8 @@ def algebraic_cohomology(
     }
 
 
-def build_relation_hypergraph_from_counterfact(
-    facts: List[Dict],
-    paraphrases_per_fact: int = 5,
-    cross_relation: bool = True,
-    fill_triangles: bool = False,
-) -> HyperedgeComplex:
-    """Construct a relation hypergraph from CounterFact-style records.
-
-    Each fact contributes one cluster of paraphrase nodes (named "fact{i}_p{j}").
-    When cross_relation is True, facts sharing the same relation_id are connected
-    via cross-cluster edges; this is what creates 1-cycles when relations
-    overlap in non-tree-like patterns.
-
-    fill_triangles=True uses 'triangulated' mode: within-fact paraphrase triangles
-    are filled (paraphrase rings become contractible), so H^1 captures only the
-    cross-relation cycles. fill_triangles=False uses 'ring' mode: paraphrase rings
-    stay non-contractible.
-    """
-    mode = 'triangulated' if fill_triangles else 'ring'
-    H = HyperedgeComplex(mode=mode)
-    relation_to_facts: Dict[str, List[int]] = {}
-    for i, fact in enumerate(facts):
-        members = [f"fact{i}_p{j}" for j in range(min(paraphrases_per_fact, len(fact.get('paraphrases', []))))]
-        H.add_cluster(members)
-        rel = fact.get('relation_id') or fact.get('relation')
-        if cross_relation and rel:
-            relation_to_facts.setdefault(str(rel), []).append(i)
-    if cross_relation:
-        for rel, fact_ids in relation_to_facts.items():
-            if len(fact_ids) < 2:
-                continue
-            # Connect first paraphrase of each fact within this relation as a ring
-            ring = [f"fact{i}_p0" for i in fact_ids]
-            for a, b in zip(ring, ring[1:] + ring[:1]):
-                H._add_edge(a, b)
-    return H
-
-
 __all__ = [
     'HyperedgeComplex',
     'algebraic_cohomology',
-    'build_relation_hypergraph_from_counterfact',
+    'simplicial_coboundaries',
 ]

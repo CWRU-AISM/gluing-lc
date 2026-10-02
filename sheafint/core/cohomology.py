@@ -19,9 +19,10 @@ def compute_cohomology_dims(
     use_randomized_svd: bool,
     device: str,
 ) -> Dict[str, int]:
-    # Cohomology dimensions:
-    #   H0 = dim(ker delta0)
-    #   H1 = dim(ker delta1) - dim(im delta0)
+    """Cohomology dimensions:
+      H0 = dim(ker delta0)
+      H1 = dim(ker delta1) - dim(im delta0)
+    """
     rank_d0 = numerical_rank(delta0, svd_rank, tol, use_randomized_svd, device=device)
     dim_C0 = delta0.shape[1]
     dim_C1 = delta0.shape[0]
@@ -50,7 +51,7 @@ def hodge_decomposition(
     delta0: torch.Tensor,
     delta1: Optional[torch.Tensor],
 ) -> Dict[str, float]:
-    # Decompose a 1-cochain into exact, harmonic, and coexact components and report energy fractions.
+    """Decompose a 1-cochain into exact, harmonic, and coexact components and report energy fractions."""
     d0_pinv = torch.linalg.pinv(delta0)
     node_section = d0_pinv @ edge_section
     exact = delta0 @ node_section

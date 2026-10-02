@@ -1,7 +1,9 @@
 """
-Shared experiment helpers.
+Shared helpers for the four experiment entry points.
 
-Submodules: :mod:`datasets`, :mod:`model_io`, :mod:`retrieval`,
-:mod:`causal`, :mod:`statistics`, :mod:`text_metrics`,
-:mod:`perplexity`, :mod:`style_examples`.
+Data and models: :mod:`datasets`, :mod:`model_io`, :mod:`style_examples`,
+:mod:`results`. Retrieval: :mod:`retrieval`, :mod:`leace`, :mod:`baselines`,
+:mod:`cycle_arms`. Topology: :mod:`hodge`, :mod:`holonomy`. Ablation:
+:mod:`causal`, :mod:`eigenbasis`. Steering: :mod:`steering`, :mod:`pixel`,
+:mod:`text_metrics`. Statistics: :mod:`statistics`.
 """

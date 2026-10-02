@@ -17,7 +17,7 @@ def randomized_truncated_svd(
     device: str = 'cuda',
     random_state: int = 42,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    # Truncated SVD via scikit-learn's randomized solver. Falls back to torch.linalg.svd on failure.
+    """Truncated SVD via scikit-learn's randomized solver. Falls back to torch.linalg.svd on failure."""
     rank = min(rank, min(matrix.shape) - 1)
 
     if rank <= 0:
@@ -47,7 +47,7 @@ def numerical_rank(
     use_randomized: bool = True,
     device: str = 'cuda',
 ) -> int:
-    # Estimate the numerical rank of a matrix above the given tolerance.
+    """Estimate the numerical rank of a matrix above the given tolerance."""
     if matrix.numel() == 0:
         return 0
 

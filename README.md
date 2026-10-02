@@ -1,233 +1,91 @@
-# Gluing Local Contexts into Global Meaning: A Sheaf-Theoretic Decomposition of Transformer Representations
+# NeurIPS 2026: Gluing Local Contexts into Global Meaning: A Sheaf-Theoretic Decomposition of Transformer Representations
 
-[![Project Page](https://img.shields.io/badge/Project-Website-blue)](https://cwru-aism.github.io/gluing-lc-page/)
-[![Paper](https://img.shields.io/badge/Paper-PDF-red)](https://cwru-aism.github.io/gluing-lc-page/static/paper.pdf)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<p align="center">
+  <a href="https://bryceag11.github.io"><b>Bryce Grant</b></a> · <a href="https://scholar.google.com/citations?user=4CbVWDcAAAAJ&hl=en"><b>Peng Wang</b></a><br>
+  Case Western Reserve University
+</p>
 
-**Authors:** Bryce Grant, Peng Wang
+<p align="center">
+  <a href="https://cwru-aism.github.io/gluing-lc-page/static/paper.pdf"><img src="https://img.shields.io/badge/Paper-PDF-b31b1b.svg" alt="Paper"></a>
+  <a href="https://cwru-aism.github.io/gluing-lc-page/"><img src="https://img.shields.io/badge/Project-Page-blue" alt="Project Page"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
+</p>
 
-## Overview
+<p align="center">
+  <img src="assets/teaser.png" alt="Sheaf decomposition of a paraphrase pair" width="85%">
+</p>
 
-This repository contains the reference implementation for the paper above. We treat a transformer's per-context representations as the stalks of a sheaf over a cover of semantically equivalent inputs and study its cohomology:
+Paraphrase pairs glue into a cellular sheaf on a frozen model's hidden states. Its Laplacian splits them into H<sup>0</sup>, content that is stable across phrasing, and H<sup>1</sup>, the directions that vary with context.
 
-* `H^0` captures features that are consistent across paraphrases (the "monosemantic" subspace).
-* `H^1` captures features that vary with phrasing (the "polysemantic" subspace, useful for steering).
-* The sheaf Laplacian gives a spectral handle on both, with chain-complex exactness guaranteed by construction.
+- **H<sup>0</sup> is a content subspace:** at 20 dimensions it beats LEACE on held-out CounterFact retrieval across eight models (mean +17.1 pp).
+- **H<sup>1</sup> carries causal influence:** ablating its coordinates changes model output 5.6–26.5× more than variance-matched controls across nine models.
+- **Harmonic mass tracks steering fragility:** it orders six architectures as their fragility under random steering does (Spearman ρ = 0.90, p = 0.014).
 
-The package ships a scalable sheaf implementation, restriction-map learners (joint PCA, Fisher / contrastive), and end-to-end steering experiments on CounterFact and MRPC across GPT-2, Llama-2, Llama-3, and Mistral.
-
-## Repository layout
-
-```
-sheaf_final/
-  sheafint/
-    core/        ScalableSheaf, H^0 fitters, edge constructors, holonomy
-    data/        Paraphrase / translation / prompt-variant contexts, relation templates
-    models/      HookManager, batched activation extraction, layer-name tables
-    steering/    Restriction maps, sheaf/Fisher decompositions, steering vectors
-    baselines.py Cosine, CKA, MSE consistency baselines
-  experiments/
-    run_causal_validation.py        Causal validation (Table 1)
-    run_cohomology_validation.py    Cohomology vs. variance heuristic
-    run_counterfact_steering.py     CounterFact steering (Table 4)
-    run_comprehensive_steering.py   Steering metrics (Table 3)
-    run_leace_counterfact.py        LEACE vs sheaf H^0 retrieval, held-out CounterFact
-    run_leace_dim_controlled.py     Same as above plus the dim-controlled LEACE-20D baseline
-    run_restriction_ablation.py     PCA / random / identity restriction maps
-    run_cycle_h0.py                 Pair / ring / clique constructions for cycle-aware H^0
-    run_crossdataset_p.py           Train P on PAWS/QQP/MRPC, evaluate on CounterFact
-    run_m_sensitivity.py            Sweep edge dimension m
-    run_pooling_sensitivity.py      Mean / last / first-token pooling
-    run_holonomy_null.py            Shuffled-paraphrase null calibration for cycle holonomy
-    utils/       Shared dataset, model I/O, retrieval, statistics, and metric helpers
-  figures/       Shared figure style for camera-ready plots
-  tests/         Pytest smoke tests
-```
-
-## Setup
-
-The codebase targets Python 3.10+ on Linux with CUDA-capable GPUs for the LLM experiments.
+## Installation
 
 ```bash
-conda env create -f environment.yml
-conda activate sheaf_final
-pip install -e ".[llm,test]"
+git clone https://github.com/CWRU-AISM/gluing-lc.git && cd gluing-lc
+pip install -e ".[llm]"    # library only: pip install -e .
 ```
 
-## Models and data
-
-### Models
-
-Models are loaded via `transformers.AutoModelForCausalLM.from_pretrained(name, ...)` and are downloaded from the HuggingFace Hub on first use. The four checkpoints we report on are:
-
-| Name in CLI | HuggingFace ID | License / access |
-|---|---|---|
-| GPT-2 | `gpt2` | Open, no auth needed |
-| Llama-2-7B | `meta-llama/Llama-2-7b-hf` | Gated, requires HF token + Meta license acceptance |
-| Llama-3-8B | `meta-llama/Meta-Llama-3-8B` | Gated, requires HF token + Meta license acceptance |
-| Mistral-7B | `mistralai/Mistral-7B-v0.1` | Open, but rate-limited without a token |
-
-To use the gated models:
-
-```bash
-hf auth login                   # paste a token from https://huggingface.co/settings/tokens
-# or set the environment variable directly
-export HF_TOKEN=hf_xxx
-```
-
-You also need to accept each model's license on its HuggingFace page once per account.
-
-The 7B+ checkpoints are too large for a single 24 GB consumer GPU at fp16, so the steering scripts default to 4-bit quantization via `bitsandbytes`:
-
-```bash
-python experiments/run_counterfact_steering.py \
-    --model mistralai/Mistral-7B-v0.1 --quantize 4bit
-```
-
-Pass `--quantize none` to load in fp16 if you have at least an A100/H100. Downloads are cached under `~/.cache/huggingface/hub` by default; override with `HF_HOME` or `TRANSFORMERS_CACHE` if you have limited disk in `$HOME`.
-
-### Data
-
-All datasets are pulled lazily by `datasets.load_dataset` on first run and cached under `~/.cache/huggingface/datasets` (override with `HF_DATASETS_CACHE`). No manual download is required.
-
-| Where it's used | HuggingFace dataset |
-|---|---|
-| MRPC paraphrase pairs (sheaf construction) | `glue` config `mrpc` |
-| QQP duplicate questions (optional cover) | `glue` config `qqp` |
-| STS-B similarity (optional) | `glue` config `stsb` |
-| PAWS adversarial paraphrases (optional) | `paws` config `labeled_final` |
-| CounterFact factual steering targets | `azhx/counterfact` |
-
-GLUE downloads are public; `azhx/counterfact` is also public on the Hub. If you are on a network without outbound access, pre-fetch them on a connected machine and copy the cache directory over, or pass `HF_DATASETS_OFFLINE=1` after the cache is warm.
-
-## Running experiments
-
-All experiments write JSON outputs under `outputs/<experiment-name>/` from the working directory. Run them from the `sheaf_final/` root.
-
-### Causal validation (Table 1)
-
-```bash
-python experiments/run_causal_validation.py --model gpt2 --n_samples 100
-python experiments/run_causal_validation.py \
-    --model mistralai/Mistral-7B-v0.1 --quantize 4bit --n_samples 200
-```
-
-Compares H1 ablations to variance-matched dimension controls and reports bootstrap CIs on the resulting effect ratios.
-
-### Cohomology vs. variance heuristic
-
-```bash
-python experiments/run_cohomology_validation.py --model gpt2 --n_pairs 100
-```
-
-Fits a `ScalableSheaf` on MRPC paraphrase activations, runs the Laplacian spectrum, and correlates the H0 / H1 dim choices with the per-dimension variance heuristic.
-
-### CounterFact steering (Table 4)
-
-```bash
-python experiments/run_counterfact_steering.py \
-    --model mistralai/Mistral-7B-v0.1 --n_tests 1000 --quantize 4bit
-```
-
-Builds joint PCA restriction maps, sheaf-Laplacian and Fisher decompositions, and evaluates steering with random / full-style / variance / H1-dim / H0-removed vectors using the McNemar paired test.
-
-### Comprehensive steering metrics (Table 3)
-
-```bash
-python experiments/run_comprehensive_steering.py --model gpt2 --n_samples 500
-```
-
-Reports perplexity ratios, semantic similarity, and text-change rates for H0 vs. H1 vs. PCA-projected steering directions.
-
-### Held-out retrieval and reviewer experiments
-
-Held-out CounterFact retrieval lets us check that sheaf H^0 outperforms LEACE concept erasure and dim-controlled LEACE-20D on a clean train/test split:
-
-```bash
-python experiments/run_leace_counterfact.py \
-    --model mistralai/Mistral-7B-v0.1 --quantize 4bit --n_facts 500
-python experiments/run_leace_dim_controlled.py \
-    --model mistralai/Mistral-7B-v0.1 --quantize 4bit --n_facts 500
-```
-
-Restriction-map ablation (joint PCA vs. random orthonormal vs. identity):
-
-```bash
-python experiments/run_restriction_ablation.py --model gpt2 --n_facts 200
-```
-
-Cycle-aware H^0 (pair-only forest vs. multi-paraphrase rings vs. cliques):
-
-```bash
-python experiments/run_cycle_h0.py --model gpt2 --n_facts 300
-```
-
-Cross-dataset transfer (fit P on PAWS/QQP/MRPC, evaluate on CounterFact):
-
-```bash
-python experiments/run_crossdataset_p.py --model gpt2 --n_facts 300
-```
-
-Edge-dimension and pooling sensitivities:
-
-```bash
-python experiments/run_m_sensitivity.py --model gpt2 --n_facts 300
-python experiments/run_pooling_sensitivity.py --model gpt2 --n_facts 300
-```
-
-Holonomy null calibration on the relation hypergraph:
-
-```bash
-python experiments/run_holonomy_null.py --model gpt2 --n_per_fact 5 \
-    --n_shuffle_seeds 20
-```
-
-The script refits per-node PCA and per-edge Procrustes transports under shuffled paraphrase assignments, bootstraps over the number of overlap tokens, and writes the observed Frobenius distances along with the shuffled null distribution.
-
-## Library quick start
+## Quick Start
 
 ```python
 import torch
-from sheafint import ScalableSheaf, ParaphraseContext
+from sheafint import ScalableSheaf, fit_h0_pca
 
-ctx = ParaphraseContext()
-texts_a, texts_b = ctx.get_all_texts()
+# Mean-pooled hidden states of paraphrase pairs (random stand-ins here).
+h_a = torch.randn(200, 768)
+h_b = h_a + 0.05 * torch.randn_like(h_a)
 
-# Replace these with extracted hidden states for `texts_a` / `texts_b`.
-features_a = torch.randn(len(texts_a), 768)
-features_b = features_a + 0.05 * torch.randn_like(features_a)
+h0 = fit_h0_pca(h_a, h_b, k=20, edge_dim=128)   # (768, 20) content basis
 
 sheaf = ScalableSheaf(edge_dim=16, device='cpu')
-sheaf.fit(
-    {'a': features_a, 'b': features_b},
-    {('a', 'b'): torch.arange(len(texts_a))},
-)
-metrics = sheaf.evaluate(
-    {'a': features_a, 'b': features_b},
-    {('a', 'b'): torch.arange(len(texts_a))},
-)
-spectrum = sheaf.compute_laplacian_spectrum()
-print(metrics.consistency_energy, spectrum['h0_dim'])
+sheaf.fit({'a': h_a, 'b': h_b}, {('a', 'b'): torch.arange(200)})
+print(sheaf.compute_cohomology())               # {'H0_dim': ..., 'H1_dim': ..., ...}
 ```
 
-For full HuggingFace pipelines see `sheafint.models.extract_features` and `experiments/utils/model_io.py`.
+## Experiments
 
-## Reproducing the paper
+```bash
+python experiments/topology.py grid --model gpt2                              # Table 1
+python experiments/retrieval.py leace --model mistralai/Mistral-7B-v0.1       # Table 2
+python experiments/causal.py coordinates --model microsoft/phi-2              # Table 3
+python experiments/steering.py counterfact --model mistralai/Mistral-7B-v0.1  # Table 4
+```
 
-The four scripts above produce the headline tables and steering numbers when run with the default args on each of GPT-2, Llama-2-7B, Llama-3-8B, and Mistral-7B. Aggregating across models is done outside this package using whatever bookkeeping you prefer; the JSON outputs already contain bootstrap CIs and significance tests.
+`--help` lists each entry point's experiments and flags. See [docs/REPRODUCTION.md](docs/REPRODUCTION.md) for the command behind each table.
+
+## Repository Structure
+
+```
+gluing-lc/
+├── sheafint/            # Library
+│   ├── core/            # Sheaf construction, cohomology, Hodge decomposition, holonomy
+│   ├── data/            # Templated relation facts
+│   └── steering/        # Restriction maps, sheaf and Fisher decompositions, steering vectors
+├── experiments/
+│   ├── retrieval.py     # Held-out fact retrieval
+│   ├── topology.py      # Cohomology and harmonic mass
+│   ├── causal.py        # Ablations
+│   ├── steering.py      # CounterFact steering
+│   └── utils/           # Shared data, model, retrieval, Hodge and statistics helpers
+├── docs/REPRODUCTION.md # Reproduction guide
+└── tests/               # Smoke tests
+```
 
 ## Citation
 
-```
+```bibtex
 @inproceedings{grant2026gluing,
   title     = {Gluing Local Contexts into Global Meaning: A Sheaf-Theoretic Decomposition of Transformer Representations},
   author    = {Bryce Grant and Peng Wang},
-  booktitle = {ICLR 2026 Workshop on Unifying Concept Representation Learning},
+  booktitle = {Advances in Neural Information Processing Systems},
   year      = {2026},
-  url       = {https://openreview.net/forum?id=eub5YrhExo}
+  url       = {https://cwru-aism.github.io/gluing-lc-page/}
 }
 ```
 
 ## License
 
-Released under the [MIT License](LICENSE).
+[MIT](LICENSE)

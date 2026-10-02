@@ -1,4 +1,4 @@
-name: sheaf_final
+name: sheafint
 channels:
   - pytorch
   - nvidia
@@ -11,10 +11,12 @@ dependencies:
       - numpy>=1.23
       - scipy>=1.10
       - scikit-learn>=1.2
-      - matplotlib>=3.6
       - tqdm>=4.65
       - transformers>=4.30
       - datasets>=2.10
       - bitsandbytes>=0.41
       - accelerate>=0.20
+      - concept-erasure>=0.2
+      - sentence-transformers>=2.2
+      - tyro>=0.8
       - pytest>=7.0

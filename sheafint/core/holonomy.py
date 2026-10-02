@@ -10,6 +10,7 @@ Helpers:
 
 * ``fit_per_node_pca``: per-node PCA with random padding for rank-deficient
   nodes (small token counts).
+* ``procrustes``: orthogonal R minimising ||X R - Y||_F.
 * ``fit_procrustes_transports``: per-edge orthogonal Procrustes between
   projected node features.
 * ``find_fundamental_cycles``: BFS / DFS-based fundamental cycle basis.
@@ -58,6 +59,12 @@ def fit_per_node_pca(
     return out
 
 
+def procrustes(X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
+    """Orthogonal R minimising ||X R - Y||_F."""
+    U, _, Vt = torch.linalg.svd(X.T @ Y, full_matrices=False)
+    return U @ Vt
+
+
 def fit_procrustes_transports(
     node_features: Dict[NodeId, torch.Tensor],
     node_projections: Dict[NodeId, torch.Tensor],
@@ -81,9 +88,7 @@ def fit_procrustes_transports(
         Pb = node_projections[b]
         Xa = node_features[a][:n].to(device) @ Pa
         Xb = node_features[b][:n].to(device) @ Pb
-        cross = Xa.T @ Xb
-        U, _, Vt = torch.linalg.svd(cross)
-        transports[(a, b)] = U @ Vt
+        transports[(a, b)] = procrustes(Xa, Xb)
     return transports
 
 

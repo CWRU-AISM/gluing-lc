@@ -26,12 +26,10 @@ from .holonomy import (
     fit_per_node_pca,
     fit_procrustes_transports,
 )
-from .metrics import SheafMetrics
 from .sheaf import ScalableSheaf
 
 __all__ = [
     'ScalableSheaf',
-    'SheafMetrics',
     'fit_h0_with_projection',
     'fit_h0_pca',
     'fit_h0_random',

@@ -9,10 +9,40 @@ projection). A fourth helper takes an arbitrary edge set so that ring or
 clique constructions can use the same machinery.
 """
 
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, Sequence, Tuple
 
 import numpy as np
 import torch
+
+
+def _pca_basis(X: np.ndarray, edge_dim: int) -> np.ndarray:
+    """(d, edge_dim) top principal directions of the rows of ``X``."""
+    Xc = X - X.mean(axis=0, keepdims=True)
+    _, _, Vt = np.linalg.svd(Xc, full_matrices=False)
+    return Vt[:min(edge_dim, Vt.shape[0])].T
+
+
+def _laplacian_eig_from_diffs(diffs: np.ndarray, P: np.ndarray):
+    """Eigendecomposition (ascending) of (P^T D^T D P) / n for edge differences D."""
+    Delta_k = diffs @ P
+    return np.linalg.eigh((Delta_k.T @ Delta_k) / max(len(diffs), 1))
+
+
+def _pull_back(P: np.ndarray, eigvecs_edge: np.ndarray, k: int, top: bool = False) -> np.ndarray:
+    """Bottom-k (or top-k) edge-space eigenvectors mapped to native space and orthonormalised."""
+    sel = eigvecs_edge[:, -k:] if top else eigvecs_edge[:, :k]
+    basis, _ = np.linalg.qr(P @ sel)
+    return basis
+
+
+def edge_laplacian_eig(pairs_a: torch.Tensor, pairs_b: torch.Tensor, P: np.ndarray):
+    """Eigendecomposition (ascending) of the edge-space sheaf Laplacian P^T C_W P."""
+    return _laplacian_eig_from_diffs((pairs_a - pairs_b).numpy().astype(np.float32), P)
+
+
+def joint_pca_projection(pairs_a: torch.Tensor, pairs_b: torch.Tensor, edge_dim: int = 128) -> np.ndarray:
+    """(d, edge_dim) joint-PCA restriction map fit on the stacked pair activations."""
+    return _pca_basis(torch.cat([pairs_a, pairs_b], dim=0).numpy().astype(np.float32), edge_dim)
 
 
 def fit_h0_with_projection(
@@ -20,27 +50,22 @@ def fit_h0_with_projection(
     pairs_b: torch.Tensor,
     P: np.ndarray,
     k: int = 20,
+    top: bool = False,
 ) -> np.ndarray:
     """
-    Bottom-k eigenvectors of P^T C_W P pulled back to native space via P.
+    Bottom-k (or, with ``top=True``, top-k = H^1) eigenvectors of P^T C_W P
+    pulled back to native space via P and orthonormalised.
 
     Args:
         pairs_a, pairs_b: (n, d) paired activations.
         P: (d, edge_dim) restriction map (orthonormal columns assumed).
-        k: number of H^0 directions to return.
+        k: number of directions to return.
 
     Returns:
-        (d, k) orthonormal basis for H^0 in native space.
+        (d, k) orthonormal basis in native space.
     """
-    n = pairs_a.shape[0]
-    diffs = (pairs_a - pairs_b).numpy().astype(np.float32)
-    Delta_k = diffs @ P
-    L = (Delta_k.T @ Delta_k) / max(n, 1)
-    _, eigvecs_edge = np.linalg.eigh(L)
-    h0_edge = eigvecs_edge[:, :k]
-    h0_native = P @ h0_edge
-    h0_native, _ = np.linalg.qr(h0_native)
-    return h0_native
+    _, eigvecs_edge = edge_laplacian_eig(pairs_a, pairs_b, P)
+    return _pull_back(P, eigvecs_edge, k, top)
 
 
 def fit_h0_pca(
@@ -48,19 +73,16 @@ def fit_h0_pca(
     pairs_b: torch.Tensor,
     k: int = 20,
     edge_dim: int = 128,
+    top: bool = False,
 ) -> np.ndarray:
     """
-    Sheaf H^0 with joint-PCA restriction map.
+    Sheaf H^0 with joint-PCA restriction map (``top=True`` gives H^1 instead).
 
     Fits P from the joint covariance of (a, b), then returns the bottom-k
-    eigenvectors of P^T C_W P pulled back to native space.
+    (top-k) eigenvectors of P^T C_W P pulled back to native space.
     """
-    X = torch.cat([pairs_a, pairs_b], dim=0).numpy().astype(np.float32)
-    Xc = X - X.mean(axis=0, keepdims=True)
-    _, _, Vt = np.linalg.svd(Xc, full_matrices=False)
-    edge_dim = min(edge_dim, Vt.shape[0])
-    P = Vt[:edge_dim].T
-    return fit_h0_with_projection(pairs_a, pairs_b, P, k=k)
+    P = joint_pca_projection(pairs_a, pairs_b, edge_dim)
+    return fit_h0_with_projection(pairs_a, pairs_b, P, k=k, top=top)
 
 
 def fit_h0_random(
@@ -119,21 +141,10 @@ def fit_h0_from_edges(
     names = list(activations.keys())
     name_to_idx = {n: i for i, n in enumerate(names)}
     X = np.stack([activations[n] for n in names]).astype(np.float32)
-    Xc = X - X.mean(axis=0, keepdims=True)
-    _, _, Vt = np.linalg.svd(Xc, full_matrices=False)
-    edge_dim = min(edge_dim, Vt.shape[0])
-    P = Vt[:edge_dim].T
-
-    diffs: List[np.ndarray] = []
-    for a, b in edges:
-        if a in name_to_idx and b in name_to_idx:
-            diffs.append(X[name_to_idx[a]] - X[name_to_idx[b]])
-    diffs_arr = np.array(diffs, dtype=np.float32)
-
-    Delta_k = diffs_arr @ P
-    L = (Delta_k.T @ Delta_k) / max(len(diffs_arr), 1)
-    _, eigvecs_edge = np.linalg.eigh(L)
-    h0_edge = eigvecs_edge[:, :k]
-    h0_native = P @ h0_edge
-    h0_native, _ = np.linalg.qr(h0_native)
-    return h0_native
+    P = _pca_basis(X, edge_dim)
+    diffs = np.array([
+        X[name_to_idx[a]] - X[name_to_idx[b]]
+        for a, b in edges if a in name_to_idx and b in name_to_idx
+    ], dtype=np.float32)
+    _, eigvecs_edge = _laplacian_eig_from_diffs(diffs, P)
+    return _pull_back(P, eigvecs_edge, k)

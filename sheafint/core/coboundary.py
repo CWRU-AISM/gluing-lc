@@ -16,7 +16,7 @@ def build_delta0(
     edge_dim: int,
     device: str,
 ) -> torch.Tensor:
-    # delta0: C^0 -> C^1, mapping node sections to per-edge consistency residuals.
+    """delta0: C^0 -> C^1, mapping node sections to per-edge consistency residuals."""
     n_nodes = len(nodes)
     n_edges = len(edges)
     node_to_idx = {n: i for i, n in enumerate(nodes)}
@@ -44,24 +44,21 @@ def build_delta0(
 def build_delta1(
     edges: List[Tuple[str, str]],
     faces: List[Tuple[str, str, str]],
-    face_projections: Dict[Tuple[str, str, str], torch.Tensor],
     edge_dim: int,
     face_dim: int,
     device: str,
 ):
-    # delta1: C^1 -> C^2 with signed face-boundary structure ensuring delta1 @ delta0 = 0.
+    """delta1: C^1 -> C^2 with signed face-boundary structure ensuring delta1 @ delta0 = 0."""
     if not faces:
         return None
 
     edge_to_idx = {e: i for i, e in enumerate(edges)}
     delta1 = torch.zeros(len(faces) * face_dim, len(edges) * edge_dim, device=device)
-    default_projection = torch.eye(face_dim, edge_dim, device=device)
+    face_proj = torch.eye(face_dim, edge_dim, device=device)
 
     for f_idx, (i, j, k) in enumerate(faces):
         row_start = f_idx * face_dim
         row_end = row_start + face_dim
-
-        face_proj = face_projections.get((i, j, k), default_projection)
 
         for edge, sign in [((i, j), 1), ((j, k), 1), ((i, k), -1)]:
             if edge in edge_to_idx:
@@ -73,7 +70,7 @@ def build_delta1(
 
 
 def exactness_error(delta0: torch.Tensor, delta1) -> float:
-    # Frobenius norm of delta1 @ delta0 (should be ~0 for a valid chain complex).
+    """Frobenius norm of delta1 @ delta0 (should be ~0 for a valid chain complex)."""
     if delta1 is None:
         return 0.0
     return torch.norm(delta1 @ delta0, 'fro').item()

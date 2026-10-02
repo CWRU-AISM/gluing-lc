@@ -2,8 +2,8 @@
 Shared model loading, hidden-state extraction, and steered generation.
 
 Wraps :mod:`transformers` so the experiment scripts share a single 4-bit /
-fp16 loader, a uniform layer accessor across GPT-2 / Llama / Mistral, and
-identical pooling and generation conventions.
+fp16 / bf16 loader, a uniform layer accessor across GPT-2 / Llama / Mistral,
+and identical pooling and generation conventions.
 """
 
 from typing import List
@@ -12,9 +12,14 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
-def load_causal_model(model_name: str, quantize: str = '4bit'):
+def load_causal_model(
+    model_name: str,
+    quantize: str = '4bit',
+    dtype: torch.dtype = torch.float16,
+    device_map='auto',
+):
     """
-    Load a causal LM with 4-bit or fp16 quantization.
+    Load a causal LM, 4-bit (NF4, fp16 compute) or unquantized in ``dtype``.
 
     Returns ``(model, tokenizer)``. The tokenizer's pad token is aliased to
     its EOS token when missing so batched generation never crashes on
@@ -33,14 +38,14 @@ def load_causal_model(model_name: str, quantize: str = '4bit'):
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             quantization_config=config,
-            device_map='auto',
+            device_map=device_map,
             torch_dtype=torch.float16,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            device_map='auto',
-            torch_dtype=torch.float16,
+            device_map=device_map,
+            torch_dtype=dtype,
         )
     model.train(False)
     return model, tokenizer
@@ -64,39 +69,77 @@ def n_layers(model) -> int:
     return len(get_layers(model))
 
 
+def device_for_inputs(model) -> str:
+    """
+    Pick a sensible device for inputs even when the model is sharded.
+
+    Prefers the first CUDA shard recorded in ``hf_device_map`` and falls
+    back to the device of the first parameter tensor.
+    """
+    if hasattr(model, 'hf_device_map'):
+        for dev in model.hf_device_map.values():
+            if 'cuda' in str(dev):
+                return dev
+    return next(model.parameters()).device
+
+
+@torch.no_grad()
+def hidden_states_at(model, tokenizer, text: str, layer_idx: int) -> torch.Tensor:
+    """
+    Per-token hidden states at the output of block ``layer_idx`` for one input.
+
+    Uses ``layer_idx + 1`` against ``output_hidden_states`` because index 0
+    is the embedding layer.
+    """
+    inputs = tokenizer(text, return_tensors='pt', truncation=True, max_length=128)
+    inputs = inputs.to(device_for_inputs(model))
+    outputs = model(inputs['input_ids'], output_hidden_states=True, return_dict=True)
+    return outputs.hidden_states[layer_idx + 1][0].to(device_for_inputs(model))
+
+
 @torch.no_grad()
 def pooled_hidden_states(
     model,
     tokenizer,
     texts: List[str],
     layer: int,
+    pooling: str = 'mean',
     batch_size: int = 16,
     max_length: int = 128,
-) -> List[torch.Tensor]:
+    fp32_pool: bool = False,
+) -> torch.Tensor:
     """
-    Mean-pooled hidden states at ``layer`` for each input text.
+    ``(len(texts), d)`` float32 CPU tensor of hidden states at ``layer``.
 
-    Returns one CPU float tensor per text, masked by the attention mask so
-    padding does not leak into the pooled vector.
+    ``pooling`` is ``'mean'`` (over non-pad tokens), ``'last'`` (last non-pad
+    token, assumes right padding) or ``'first'``. Mean pooling runs in the
+    model dtype unless ``fp32_pool`` is set.
     """
     device = next(model.parameters()).device
     out: List[torch.Tensor] = []
     for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        inputs = tokenizer(
-            batch,
+        enc = tokenizer(
+            texts[i:i + batch_size],
             return_tensors='pt',
             padding=True,
             truncation=True,
             max_length=max_length,
         )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        outputs = model(**inputs, output_hidden_states=True)
-        hs = outputs.hidden_states[layer]
-        mask = inputs['attention_mask'].unsqueeze(-1)
-        pooled = (hs * mask).sum(1) / mask.sum(1)
-        out.extend(p.cpu().float() for p in pooled)
-    return out
+        enc = {k: v.to(device) for k, v in enc.items()}
+        h = model(**enc, output_hidden_states=True).hidden_states[layer]
+        mask = enc['attention_mask']
+        if pooling == 'mean':
+            m = mask.unsqueeze(-1).float() if fp32_pool else mask.unsqueeze(-1)
+            pooled = (h * m).sum(dim=1) / m.sum(dim=1).clamp(min=1)
+        elif pooling == 'last':
+            lengths = mask.sum(dim=1).clamp(min=1) - 1
+            pooled = h.gather(1, lengths.view(-1, 1, 1).expand(-1, 1, h.size(-1))).squeeze(1)
+        elif pooling == 'first':
+            pooled = h[:, 0, :]
+        else:
+            raise ValueError(f"unknown pooling: {pooling}")
+        out.append(pooled.float().cpu())
+    return torch.cat(out, dim=0)
 
 
 @torch.no_grad()

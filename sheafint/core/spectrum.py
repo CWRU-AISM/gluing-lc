@@ -13,7 +13,7 @@ from .svd import randomized_truncated_svd
 
 
 def compute_laplacian_spectrum(delta0: torch.Tensor, tol: float, device: str, k: int = 50) -> Dict:
-    # Eigendecomposition of the node Laplacian L = delta0^T delta0.
+    """Eigendecomposition of the node Laplacian L = delta0^T delta0."""
     L_node = delta0.T @ delta0
 
     eigenvectors: Optional[torch.Tensor]
@@ -68,7 +68,7 @@ def project_signal_onto_h0(
     node_to_idx,
     tol: float,
 ) -> Dict:
-    # Project a C^0 signal onto the kernel of delta0 (the H0 subspace).
+    """Project a C^0 signal onto the kernel of delta0 (the H0 subspace)."""
     if h0_basis is None or h0_basis.shape[1] == 0:
         s_h0 = torch.zeros_like(signal)
     else:

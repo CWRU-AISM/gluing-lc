@@ -1,14 +1,17 @@
 """
 Statistical helpers shared across experiments.
 
-Provides a bootstrap mean confidence interval and McNemar's test for paired
-binary outcomes (used to compare steering accuracies).
+Provides a bootstrap mean confidence interval, McNemar's test for paired
+binary outcomes (used to compare steering accuracies), and an exact
+permutation Spearman test for small model-level correlations.
 """
 
-from typing import Iterable, Tuple
+import itertools
+import math
+from typing import Iterable, Sequence, Tuple
 
 import numpy as np
-from scipy.stats import binomtest, chi2 as _chi2_dist
+from scipy.stats import binomtest, chi2 as _chi2_dist, rankdata
 
 
 def bootstrap_ci(
@@ -58,3 +61,18 @@ def mcnemar_test(s1: Iterable[int], s2: Iterable[int]) -> float:
         return float(binomtest(only_a, n_disc, 0.5).pvalue)
     chi2 = (abs(only_a - only_b) - 1) ** 2 / n_disc
     return float(1 - _chi2_dist.cdf(chi2, df=1))
+
+
+def spearman_exact(x: Sequence[float], y: Sequence[float]) -> Tuple[float, float]:
+    """
+    Spearman rho between ``x`` and ``y`` with the exact one-sided permutation
+    p-value P(rho_perm >= rho_obs) over all n! rankings of ``y``.
+
+    Used for the harmonic-mass vs steering-fragility correlation (n <= 9, so
+    the enumeration is at most 362,880 rankings).
+    """
+    rx, ry = rankdata(x), rankdata(y)
+    corr = lambda a, b: float(np.corrcoef(a, b)[0, 1])
+    obs = corr(rx, ry)
+    hits = sum(corr(rx, np.asarray(perm)) >= obs - 1e-12 for perm in itertools.permutations(ry))
+    return obs, hits / math.factorial(len(ry))

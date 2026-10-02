@@ -1,8 +1,7 @@
 """
 Node projections and edge transport maps for sheaf construction.
 
-Provides joint-PCA and per-node PCA projections plus orthogonal Procrustes
-transports between projected node features.
+Provides the joint-PCA projection shared across all nodes.
 """
 
 from typing import Dict, Tuple
@@ -18,14 +17,11 @@ def learn_joint_projections(
     device: str,
     use_randomized_svd: bool = True,
 ):
-    # Joint PCA over all overlapping samples enforces transitivity by sharing the projection.
+    """Joint PCA over all overlapping samples enforces transitivity by sharing the projection."""
     feature_dims = {n: features[n].shape[1] for n in nodes if n in features}
     unique_dims = set(feature_dims.values())
 
-    if len(unique_dims) != 1:
-        return _learn_heterogeneous_projections(
-            features, pair_overlaps, nodes, edge_dim, device, use_randomized_svd
-        )
+    assert len(unique_dims) == 1, f"all nodes must share one feature dim, got {unique_dims}"
 
     overlap_features = []
     for (i, j), indices in pair_overlaps.items():
@@ -62,96 +58,3 @@ def learn_joint_projections(
 
     return node_projections, edge_transports, actual_edge_dim
 
-
-def _learn_heterogeneous_projections(
-    features: Dict[str, torch.Tensor],
-    pair_overlaps: Dict[Tuple[str, str], torch.Tensor],
-    nodes,
-    edge_dim: int,
-    device: str,
-    use_randomized_svd: bool,
-):
-    # Per-node projections plus Procrustes transports for varying feature dimensions.
-    node_projections: Dict[str, torch.Tensor] = {}
-    edge_transports: Dict[Tuple[str, str], torch.Tensor] = {}
-
-    for node, feat in features.items():
-        if feat.shape[0] == 0:
-            continue
-
-        centered = feat - feat.mean(dim=0, keepdim=True)
-        rank = min(edge_dim, feat.shape[1])
-
-        if use_randomized_svd and feat.shape[0] > 100:
-            _, _, Vt = randomized_truncated_svd(centered, rank, device=device)
-        else:
-            _, _, Vt = torch.linalg.svd(centered, full_matrices=False)
-            Vt = Vt[:rank]
-
-        if rank < edge_dim:
-            padding = torch.zeros(edge_dim - rank, feat.shape[1], device=device)
-            Vt = torch.cat([Vt, padding], dim=0)
-
-        node_projections[node] = Vt.T
-
-    identity = torch.eye(edge_dim, device=device)
-    for (i, j), indices in pair_overlaps.items():
-        if len(indices) < 2:
-            edge_transports[(i, j)] = identity.clone()
-            continue
-
-        Pi = node_projections[i]
-        Pj = node_projections[j]
-        Xi = features[i][indices] @ Pi
-        Xj = features[j][indices] @ Pj
-
-        cross = Xi.T @ Xj
-        U, _, Vt = torch.linalg.svd(cross)
-        edge_transports[(i, j)] = U @ Vt
-
-    return node_projections, edge_transports, edge_dim
-
-
-def learn_procrustes_projections(
-    features: Dict[str, torch.Tensor],
-    pair_overlaps: Dict[Tuple[str, str], torch.Tensor],
-    nodes,
-    edge_dim: int,
-    device: str,
-):
-    # Per-node PCA followed by Procrustes alignment between connected nodes.
-    node_projections: Dict[str, torch.Tensor] = {}
-    edge_transports: Dict[Tuple[str, str], torch.Tensor] = {}
-
-    for node, feat in features.items():
-        if feat.shape[0] == 0:
-            continue
-
-        centered = feat - feat.mean(dim=0, keepdim=True)
-        rank = min(edge_dim, feat.shape[1])
-
-        _, _, Vt = torch.linalg.svd(centered, full_matrices=False)
-        Vt = Vt[:rank]
-
-        if rank < edge_dim:
-            padding = torch.zeros(edge_dim - rank, feat.shape[1], device=device)
-            Vt = torch.cat([Vt, padding], dim=0)
-
-        node_projections[node] = Vt.T
-
-    identity = torch.eye(edge_dim, device=device)
-    for (i, j), indices in pair_overlaps.items():
-        if len(indices) < 2:
-            edge_transports[(i, j)] = identity.clone()
-            continue
-
-        Pi = node_projections[i]
-        Pj = node_projections[j]
-        Xi = features[i][indices] @ Pi
-        Xj = features[j][indices] @ Pj
-
-        cross = Xi.T @ Xj
-        U, _, Vt = torch.linalg.svd(cross)
-        edge_transports[(i, j)] = U @ Vt
-
-    return node_projections, edge_transports

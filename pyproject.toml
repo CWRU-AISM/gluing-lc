@@ -9,7 +9,10 @@ description = "Sheaf cohomology for transformer interpretability and steering."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Bryce Grant", email = "bag100@case.edu" }]
+authors = [
+    { name = "Bryce Grant", email = "bag100@case.edu" },
+    { name = "Peng Wang" },
+]
 keywords = ["interpretability", "sheaf", "cohomology", "transformer", "steering"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -22,7 +25,6 @@ dependencies = [
     "numpy>=1.23",
     "scipy>=1.10",
     "scikit-learn>=1.2",
-    "matplotlib>=3.6",
     "tqdm>=4.65",
 ]
 
@@ -32,6 +34,9 @@ llm = [
     "datasets>=2.10",
     "bitsandbytes>=0.41",
     "accelerate>=0.20",
+    "concept-erasure>=0.2",
+    "sentence-transformers>=2.2",
+    "tyro>=0.8",
 ]
 test = ["pytest>=7.0"]
 

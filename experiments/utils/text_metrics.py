@@ -97,6 +97,7 @@ def evaluate_generation(baseline: str, steered: str, entity: str, subject: str) 
     coherent_joint = joint and coherent
 
     return {
+        'known': int(entity_in_text(baseline, entity)),  # fact recalled without steering
         'fact': int(fact_preserved),
         'subject': int(subject_preserved),
         'style': int(style_changed),
