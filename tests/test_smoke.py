@@ -98,3 +98,16 @@ def test_entry_point_experiments_parse(family):
         args = [name] + (['--model', 'gpt2'] if 'model' in {f.name for f in dataclasses.fields(cls)} else [])
         cfg = tyro.extras.subcommand_cli_from_dict(module.EXPERIMENTS, args=args, use_underscores=True)
         assert isinstance(cfg, cls)
+
+
+def test_cycle_holonomy_is_identity_on_flat_data():
+    from sheafint.core.holonomy import cycle_holonomy, procrustes
+    torch.manual_seed(0)
+    k = 8
+    frames = [torch.linalg.qr(torch.randn(k, k))[0] for _ in range(4)]
+    X0 = torch.randn(50, k)
+    X = [X0 @ G for G in frames]
+    T = {(0, 1): procrustes(X[0], X[1]), (1, 2): procrustes(X[1], X[2]),
+         (2, 3): procrustes(X[2], X[3]), (0, 3): procrustes(X[0], X[3])}
+    H = cycle_holonomy([0, 1, 2, 3], T, k, 'cpu')
+    assert torch.linalg.norm(torch.eye(k) - H) < 1e-4

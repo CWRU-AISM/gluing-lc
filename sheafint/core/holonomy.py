@@ -160,16 +160,17 @@ def cycle_holonomy(
     Compose Q transports along a closed cycle. Returns the identity if any
     edge along the cycle is missing from ``edge_transports``.
     """
+    # Transports are row-form (x_a Q_ab ~ x_b, see ``procrustes``), so walking
+    # a -> b -> c composes on the right: H = Q_ab Q_bc ...
     H = torch.eye(edge_dim, device=device)
     for a, b in zip(cycle, list(cycle[1:]) + [cycle[0]]):
-        e = (min(a, b), max(a, b))
-        if e in edge_transports:
-            Q = edge_transports[e]
-            if (a, b) != e:
-                Q = Q.T
-            H = Q @ H
+        if (a, b) in edge_transports:
+            Q = edge_transports[(a, b)]
+        elif (b, a) in edge_transports:
+            Q = edge_transports[(b, a)].T
         else:
             return torch.eye(edge_dim, device=device)
+        H = H @ Q
     return H
 
 
